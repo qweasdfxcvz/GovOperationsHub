@@ -1,0 +1,6 @@
+@GovOperationsHub.WebApi_HostAddress = http://localhost:5293
+
+GET {{GovOperationsHub.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

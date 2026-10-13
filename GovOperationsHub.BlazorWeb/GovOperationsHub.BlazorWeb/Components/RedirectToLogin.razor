@@ -1,0 +1,9 @@
+﻿@inject NavigationManager NavManager
+
+@code {
+    protected override void OnInitialized()
+    {
+        // توجيه المستخدم لصفحة الدخول فوراً
+        NavManager.NavigateTo("/login");
+    }
+}

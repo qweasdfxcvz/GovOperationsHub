@@ -1,0 +1,231 @@
+﻿@page "/contracts"
+@using GovOperationsHub.BlazorWeb.Models
+@inject HttpClient Http
+@inject NavigationManager NavManager
+@rendermode InteractiveServer
+
+<PageTitle>إدارة العقود وتتبع مستوى الخدمة</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="text-primary fw-bold">إدارة العقود واتفاقيات مستوى الخدمة (SLA)</h3>
+    <button class="btn btn-success px-4" @onclick="ToggleAddForm">➕ إبرام عقد جديد</button>
+</div>
+
+<!-- نموذج إبرام العقد -->
+@if (showAddForm)
+{
+    <div class="card shadow-sm mb-4 border-0 border-top border-success border-4">
+        <div class="card-body bg-light">
+            <EditForm Model="newContract" OnValidSubmit="SaveContract">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">رقم العقد</label>
+                        <InputText @bind-Value="newContract.ContractNumber" class="form-control" placeholder="SY-GOV-2026-001" required />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">موضوع العقد</label>
+                        <InputText @bind-Value="newContract.Title" class="form-control" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">نوع العقد</label>
+                        <InputSelect @bind-Value="newContract.ContractType" class="form-select">
+                            <option value="1">إنشاء مراكز خدمة جديدة</option>
+                            <option value="2">اتفاقية تبادل بيانات (API)</option>
+                        </InputSelect>
+                    </div>
+
+                    <!-- التعديل هنا: إضافة الوزارة والمؤسسة -->
+                    <div class="col-md-3">
+                        <label class="form-label">الوزارة الطرف الثاني</label>
+                        <InputSelect @bind-Value="newContract.MinistryId" class="form-select" required>
+                            <option value="">-- اختر الوزارة --</option>
+                            @if (ministries != null)
+                            {
+                                @foreach (var min in ministries)
+                                {
+                                    <option value="@min.Id">@min.Name</option>
+                                }
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">المؤسسة / الهيئة (اختياري)</label>
+                        <InputSelect @bind-Value="newContract.GovernmentEntityId" class="form-select">
+                            <option value="">-- يتبع للوزارة مباشرة --</option>
+                            @if (governmentEntities != null)
+                            {
+                                @foreach (var entity in governmentEntities)
+                                {
+                                    <option value="@entity.Id">@entity.Name</option>
+                                }
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label">تاريخ البدء</label>
+                        <InputDate @bind-Value="newContract.StartDate" class="form-control" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">تاريخ الانتهاء</label>
+                        <InputDate @bind-Value="newContract.EndDate" class="form-control" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">الميزانية (ل.س)</label>
+                        <InputNumber @bind-Value="newContract.TotalBudget" class="form-control" />
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="col-12"><div class="alert alert-danger mt-2">@errorMessage</div></div>
+                    }
+
+                    <div class="col-md-12 text-end">
+                        <button type="button" class="btn btn-secondary me-2" @onclick="ToggleAddForm">إلغاء</button>
+                        <button type="submit" class="btn btn-primary px-5">حفظ ومتابعة لإضافة الملاحق ➡️</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<!-- هنا يبقى جدول العقود ونافذة الـ SLA كما هما في كودك السابق... -->
+@code {
+    private List<ContractListDto>? contracts;
+    private List<DropdownDto>? ministries;
+    private List<DropdownDto>? governmentEntities; // القائمة الجديدة للمؤسسات
+    
+    private CreateContractDto newContract = new() { StartDate = DateTime.Today, EndDate = DateTime.Today.AddYears(1), SigningDate = DateTime.Today };
+    
+    private bool showAddForm = false;
+    private bool showSlaModal = false;
+    private string errorMessage = string.Empty;
+    private ContractBottlenecksDto? selectedBottlenecks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadContracts();
+        await LoadDropdowns();
+    }
+
+    private async Task LoadContracts()
+    {
+        // استخدام ResultModel لضمان فك التشفير الصحيح للـ JSON
+        var response = await Http.GetFromJsonAsync<ResultModel<List<ContractListDto>>>("api/Contracts");
+        if (response != null && response.Succeeded) contracts = response.Data;
+    }
+
+    private async Task LoadDropdowns()
+    {
+        var minResp = await Http.GetFromJsonAsync<ResultModel<List<DropdownDto>>>("api/Ministries");
+        if (minResp != null && minResp.Succeeded) ministries = minResp.Data;
+
+        // جلب المؤسسات لتظهر في القائمة المنسدلة
+        var entResp = await Http.GetFromJsonAsync<ResultModel<List<DropdownDto>>>("api/GovernmentEntities");
+        if (entResp != null && entResp.Succeeded) governmentEntities = entResp.Data;
+    }
+
+    private void ToggleAddForm()
+    {
+        showAddForm = !showAddForm;
+        errorMessage = string.Empty;
+    }
+
+    private async Task SaveContract()
+    {
+        errorMessage = string.Empty;
+        var response = await Http.PostAsJsonAsync("api/Contracts", newContract);
+        
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<ResultModel<int>>();
+            if (result != null && result.Succeeded)
+            {
+                // التوجيه السحري: نقل المستخدم فوراً لصفحة الملاحق
+                NavManager.NavigateTo($"/contracts/{result.Data}/annexes");
+            }
+        }
+        else
+        {
+            errorMessage = "حدث خطأ أثناء حفظ العقد، يرجى التأكد من البيانات (قد يكون رقم العقد مكرراً).";
+        }
+    }
+
+    private async Task OpenSlaModal(int contractId)
+    {
+        var response = await Http.GetFromJsonAsync<ResultModel<ContractBottlenecksDto>>($"api/Contracts/{contractId}/bottlenecks");
+        if (response != null && response.Succeeded)
+        {
+            selectedBottlenecks = response.Data;
+            showSlaModal = true;
+        }
+    }
+
+    private string GetStatusBadge(string status)
+    {
+        if (status.Contains("متعثرة") || status.Contains("تأخير")) return "bg-danger";
+        if (status.Contains("تم الإنجاز")) return "bg-success";
+        if (status.Contains("قيد التنفيذ")) return "bg-primary";
+        if (status.Contains("بانتظار")) return "bg-warning text-dark";
+        return "bg-secondary";
+    }
+
+    // ==========================================
+    // الكلاسات (DTOs) المكتملة
+    // ==========================================
+
+    public class ContractListDto 
+    { 
+        public int Id { get; set; } 
+        public string ContractNumber { get; set; } = ""; 
+        public string Title { get; set; } = ""; 
+        public string MinistryName { get; set; } = ""; 
+        public string ContractTypeArabic { get; set; } = ""; 
+        public decimal TotalBudget { get; set; } 
+        public DateTime StartDate { get; set; } 
+        public DateTime EndDate { get; set; } 
+    }
+
+    public class DropdownDto { public int Id { get; set; } public string Name { get; set; } = ""; }
+
+    public class CreateContractDto 
+    { 
+        public string ContractNumber { get; set; } = ""; 
+        public string Title { get; set; } = ""; 
+        public int ContractType { get; set; } = 1; 
+        public int MinistryId { get; set; } 
+        public int? GovernmentEntityId { get; set; } 
+        public DateTime SigningDate { get; set; } 
+        public DateTime StartDate { get; set; } 
+        public DateTime EndDate { get; set; } 
+        public decimal TotalBudget { get; set; } 
+    }
+    
+    // SLA DTOs
+    public class ContractBottlenecksDto 
+    { 
+        public string ContractNumber { get; set; } = ""; 
+        public int TotalDelayDays { get; set; } 
+        public bool HasBreachedStages { get; set; } 
+        public List<StageDelaySummaryDto> Stages { get; set; } = new(); 
+    }
+
+    public class StageDelaySummaryDto 
+    { 
+        public string TrackName { get; set; } = ""; 
+        public string StageName { get; set; } = ""; 
+        public string StatusArabic { get; set; } = ""; 
+        public DateTime ExpectedCompletionDate { get; set; } 
+        public int DelayDays { get; set; } 
+        public string ResponsiblePartyArabic { get; set; } = ""; 
+    }
+
+    // كلاس مساعد لفك تشفير استجابة الـ API
+    public class ResultModel<T> 
+    { 
+        public bool Succeeded { get; set; } 
+        public string? Message { get; set; } 
+        public T? Data { get; set; } 
+    }
+}

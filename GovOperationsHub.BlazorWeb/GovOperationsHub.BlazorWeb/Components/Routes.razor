@@ -1,0 +1,32 @@
+﻿<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(Program).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized>
+                    @* السياق (context) هنا يحتوي على حالة المستخدم الحالية *@
+                    @if (context.User.Identity?.IsAuthenticated == true)
+                    {
+                        <div class="alert alert-danger m-5 text-center shadow-sm border-danger">
+                            <h4>⛔ عذراً، لا تملك الصلاحية!</h4>
+                            <p>هذه الصفحة مخصصة لأدوار أخرى، يرجى العودة للرئيسية.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        @* إذا لم يكن مسجل دخول، قم بتوجيهه فوراً *@
+                        <GovOperationsHub.BlazorWeb.Components.RedirectToLogin />
+                    }
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>غير موجود</PageTitle>
+            <LayoutView Layout="typeof(Layout.MainLayout)">
+                <div class="alert alert-warning m-5 text-center">
+                    <p role="alert">الصفحة المطلوبة غير موجودة في المنظومة.</p>
+                </div>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Core/">
+    <Project Path="GovOperationsHub.Application/GovOperationsHub.Application.csproj" />
+    <Project Path="GovOperationsHub.Domain/GovOperationsHub.Domain.csproj" />
+  </Folder>
+  <Folder Name="/src/Infrastructure/">
+    <Project Path="GovOperationsHub.Infrastructure/GovOperationsHub.Infrastructure.csproj" />
+    <Project Path="GovOperationsHub.Persistence/GovOperationsHub.Persistence.csproj" />
+  </Folder>
+  <Folder Name="/src/Presentation/">
+    <Project Path="GovOperationsHub.BlazorWeb/GovOperationsHub.BlazorWeb.Client/GovOperationsHub.BlazorWeb.Client.csproj" />
+    <Project Path="GovOperationsHub.BlazorWeb/GovOperationsHub.BlazorWeb/GovOperationsHub.BlazorWeb.csproj" />
+    <Project Path="GovOperationsHub.WebApi/GovOperationsHub.WebApi.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="GovOperationsHub.Application.Tests/GovOperationsHub.Application.Tests.csproj" />
+    <Project Path="GovOperationsHub.Domain.Tests/GovOperationsHub.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

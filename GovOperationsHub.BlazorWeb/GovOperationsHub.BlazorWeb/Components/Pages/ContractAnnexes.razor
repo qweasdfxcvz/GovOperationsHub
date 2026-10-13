@@ -1,0 +1,208 @@
+﻿@page "/contracts/{ContractId:int}/annexes"
+@attribute [Authorize]
+@inject HttpClient Http
+@inject NavigationManager NavManager
+@rendermode InteractiveServer
+@using GovOperationsHub.BlazorWeb.Models
+
+<PageTitle>ملاحق العقد | بناء المراكز والخدمات</PageTitle>
+
+<div class="mb-4 d-flex justify-content-between align-items-center">
+    <div>
+        <button class="btn btn-outline-secondary me-3" @onclick='() => NavManager.NavigateTo("/contracts")'>
+            ⬅️ العودة لجدول العقود
+        </button>
+        <h4 class="d-inline text-primary fw-bold">إدارة ملاحق العقد رقم (@ContractId)</h4>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 border-top border-warning border-4">
+    <div class="card-body bg-light">
+        <h5 class="card-title text-warning mb-4">📄 إصدار ملحق جديد للعقد</h5>
+        
+        <EditForm Model="newAnnex" OnValidSubmit="SaveAnnex" FormName="AddAnnexForm">
+            <DataAnnotationsValidator />
+            
+            <div class="row g-3">
+                <div class="col-12"><h6 class="text-secondary border-bottom pb-2">1. بيانات الملحق</h6></div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">رقم الملحق</label>
+                    <InputText @bind-Value="newAnnex.AnnexNumber" class="form-control" placeholder="مثال: 1/أ" required />
+                </div>
+                <div class="col-md-9">
+                    <label class="form-label">نطاق عمل الملحق (الوصف)</label>
+                    <InputText @bind-Value="newAnnex.ScopeDescription" class="form-control" placeholder="تجهيز البنية التحتية والخدمات لمركز كذا..." required />
+                </div>
+
+                <div class="col-12 mt-4"><h6 class="text-secondary border-bottom pb-2">2. تحديد المركز المستهدف</h6></div>
+                
+                <div class="col-12 mb-3">
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="btnradio" id="btnradio1" autocomplete="off" 
+                               checked="@newAnnex.IsNewCenter" @onchange="() => newAnnex.IsNewCenter = true">
+                        <label class="btn btn-outline-primary fw-bold" for="btnradio1">🏢 تأسيس مركز جديد</label>
+
+                        <input type="radio" class="btn-check" name="btnradio" id="btnradio2" autocomplete="off" 
+                               checked="@(!newAnnex.IsNewCenter)" @onchange="() => newAnnex.IsNewCenter = false">
+                        <label class="btn btn-outline-primary fw-bold" for="btnradio2">🔄 إضافة خدمات لمركز موجود مسبقاً</label>
+                    </div>
+                </div>
+
+                @if (newAnnex.IsNewCenter)
+                {
+                    <div class="col-md-4">
+                        <label class="form-label">اسم المركز الجديد</label>
+                        <InputText @bind-Value="newAnnex.CenterName" class="form-control" placeholder="مركز خدمة المواطن - الميدان" />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">كود المركز (Code)</label>
+                        <InputText @bind-Value="newAnnex.CenterCode" class="form-control" placeholder="CSC-MD-01" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">المحافظة</label>
+                        <InputSelect @bind-Value="newAnnex.Governorate" class="form-select">
+                            @foreach (var gov in governorates)
+                            {
+                                <option value="@gov.Key">@gov.Value</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">المدينة / المنطقة</label>
+                        <InputText @bind-Value="newAnnex.City" class="form-control" />
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">العنوان التفصيلي</label>
+                        <InputText @bind-Value="newAnnex.DetailedAddress" class="form-control" />
+                    </div>
+                }
+                else
+                {
+                    <div class="col-md-6">
+                        <label class="form-label">اختر المركز الحالي لإضافة الخدمات له</label>
+                        <InputSelect @bind-Value="newAnnex.ExistingCenterId" class="form-select">
+                            <option value="">-- اختر من المراكز المسجلة في النظام --</option>
+                            @if (existingCenters != null)
+                            {
+                                @foreach (var c in existingCenters)
+                                {
+                                    <option value="@c.Id">@c.Name - @c.City</option>
+                                }
+                            }
+                        </InputSelect>
+                    </div>
+                }
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-3 fw-bold">@errorMessage</div>
+            }
+            @if (!string.IsNullOrEmpty(successMessage))
+            {
+                <div class="alert alert-success mt-3 fw-bold">
+                    <i class="bi bi-check-circle-fill me-2"></i> @successMessage
+                    <br/><small class="text-dark">النموذج جاهز الآن لإدخال الملحق التالي إن وجد.</small>
+                </div>
+            }
+
+            <div class="mt-4 text-end">
+                <button type="submit" class="btn btn-primary px-5 fw-bold" disabled="@isSaving">
+                    @(isSaving ? "جاري الإصدار والتوجيه الآلي..." : "حفظ الملحق وتوليد المهام (SLA)")
+                </button>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int ContractId { get; set; }
+
+    private CreateAnnexDto newAnnex = new() { Governorate = 1, IsNewCenter = true };
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private bool isSaving = false;
+    private List<CitizenCenterDto>? existingCenters;
+
+    private readonly Dictionary<int, string> governorates = new()
+    {
+        { 1, "دمشق" }, { 2, "ريف دمشق" }, { 3, "حلب" }, { 4, "حمص" }, { 5, "حماة" },
+        { 6, "اللاذقية" }, { 7, "طرطوس" }, { 8, "إدلب" }, { 9, "درعا" }, 
+        { 10, "السويداء" }, { 11, "القنيطرة" }, { 12, "دير الزور" }, { 13, "الرقة" }, { 14, "الحسكة" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        newAnnex.ContractId = ContractId;
+        await LoadExistingCenters();
+    }
+
+    private async Task LoadExistingCenters()
+    {
+        // جلب قائمة المراكز لاستخدامها في حال اختار المستخدم "إضافة خدمات لمركز موجود"
+        var response = await Http.GetFromJsonAsync<ResultModel<List<CitizenCenterDto>>>("api/CitizenCenters");
+        if (response != null && response.Succeeded)
+        {
+            existingCenters = response.Data;
+        }
+    }
+
+    private async Task SaveAnnex()
+    {
+        isSaving = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"api/Contracts/{ContractId}/annexes", newAnnex);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ResultModel<int>>();
+                if (result != null && result.Succeeded)
+                {
+                    successMessage = result.Message ?? "تم الحفظ بنجاح.";
+                    // تفريغ الفورم مع إبقائه في نفس الصفحة ليتمكن من إضافة ملاحق أخرى
+                    newAnnex = new CreateAnnexDto { ContractId = ContractId, Governorate = 1, IsNewCenter = true };
+                }
+                else
+                {
+                    errorMessage = result?.Message ?? "حدث خطأ أثناء الحفظ.";
+                }
+            }
+            else
+            {
+                var errorText = await response.Content.ReadAsStringAsync();
+                errorMessage = "حدث خطأ من الخادم. تأكد من إكمال الحقول الإلزامية.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    public class CreateAnnexDto
+    {
+        public int ContractId { get; set; }
+        public string AnnexNumber { get; set; } = string.Empty;
+        public string ScopeDescription { get; set; } = string.Empty;
+        public bool IsNewCenter { get; set; } = true;
+        public int? ExistingCenterId { get; set; }
+        public string? CenterName { get; set; }
+        public string? CenterCode { get; set; }
+        public int? Governorate { get; set; }
+        public string? City { get; set; }
+        public string? DetailedAddress { get; set; }
+    }
+
+    public class CitizenCenterDto { public int Id { get; set; } public string Name { get; set; } = ""; public string City { get; set; } = ""; }
+    public class ResultModel<T> { public bool Succeeded { get; set; } public string? Message { get; set; } public T? Data { get; set; } }
+}

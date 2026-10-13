@@ -1,0 +1,41 @@
+﻿@page "/"
+@attribute [Authorize]
+@using GovOperationsHub.Domain.Identity
+@inject NavigationManager NavManager
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>الرئيسية | جاري التوجيه...</PageTitle>
+
+<div class="text-center mt-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">جاري توجيهك...</span>
+    </div>
+    <h5 class="mt-3">جاري تحضير مساحة العمل الخاصة بك...</h5>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        // توجيه ذكي بناءً على دور المستخدم
+        if (user.IsInRole(AppRoles.SystemAdmin))
+        {
+            NavManager.NavigateTo("/admin/users");
+        }
+        else if (user.IsInRole(AppRoles.NetworkEngineer))
+        {
+            NavManager.NavigateTo("/network-centers");
+        }
+        else if (user.IsInRole(AppRoles.ContractOfficer))
+        {
+            NavManager.NavigateTo("/contracts"); // مسار افتراضي مستقبلي
+        }
+        else
+        {
+            // إذا كان لديه دور غير معروف، اتركه في هذه الصفحة أو وجهه لصفحة عامة
+            NavManager.NavigateTo("/dashboard");
+        }
+    }
+}

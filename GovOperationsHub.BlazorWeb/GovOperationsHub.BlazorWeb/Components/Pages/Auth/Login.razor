@@ -1,0 +1,138 @@
+﻿@page "/login"
+@layout GovOperationsHub.BlazorWeb.Components.Layout.EmptyLayout
+@inject IJSRuntime JS
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using GovOperationsHub.BlazorWeb.Providers
+@using System.ComponentModel.DataAnnotations
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavManager
+
+<PageTitle>تسجيل الدخول | GovOperationsHub</PageTitle>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card shadow-lg border-0 rounded-3 mt-5">
+                <div class="card-header bg-dark text-white text-center py-4">
+                    <h4 class="mb-0">🛡️ منظومة العمليات الحكومية</h4>
+                    <small>تسجيل الدخول الموحد</small>
+                </div>
+                <div class="card-body p-4 bg-light">
+                    <EditForm Model="loginModel" OnValidSubmit="ExecuteLogin" FormName="LoginForm">
+                        <DataAnnotationsValidator />
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">اسم المستخدم</label>
+                            <InputText @bind-Value="loginModel.Username" class="form-control form-control-lg" placeholder="admin" />
+                            <ValidationMessage For="() => loginModel.Username" class="text-danger" />
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">كلمة المرور</label>
+                            <InputText @bind-Value="loginModel.Password" type="password" class="form-control form-control-lg" placeholder="********" />
+                            <ValidationMessage For="() => loginModel.Password" class="text-danger" />
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(errorMessage))
+                        {
+                            <div class="alert alert-danger fw-bold text-center">@errorMessage</div>
+                        }
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold shadow-sm" disabled="@isLoading">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                                <span>جاري التحقق...</span>
+                            }
+                            else
+                            {
+                                <span>تسجيل الدخول</span>
+                            }
+                        </button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // ⚠️ هذا السطر كان مفقوداً وهو السر في تعبئة البيانات في .NET الحديث
+    [SupplyParameterFromForm]
+    private LoginDto loginModel { get; set; } = new();
+    
+    private bool isLoading = false;
+    private string errorMessage = string.Empty;
+
+    private async Task ExecuteLogin()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+        StateHasChanged(); // تحديث الشاشة لإظهار حالة التحميل
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("https://localhost:7241/api/Auth/login", loginModel);
+
+            // محاولة قراءة الـ JSON سواء كان الرد 200 OK أو 400 Bad Request
+            var result = await response.Content.ReadFromJsonAsync<LoginResult>();
+
+            if (response.IsSuccessStatusCode && result != null && (result.Succeeded || result.IsSuccess) && result.Data != null)
+                {
+                    // بدلاً من الجافاسكريبت، نرسل التوكن للمسار الآمن الذي برمجناه في Program.cs
+                    NavManager.NavigateTo($"/auth/signin?token={Uri.EscapeDataString(result.Data.Token)}", forceLoad: true);
+                }
+            else
+            {
+                // استخراج رسالة الخطأ بدقة
+                if (result?.Errors != null && result.Errors.Any())
+                {
+                    errorMessage = string.Join(" | ", result.Errors);
+                }
+                else if (!string.IsNullOrEmpty(result?.Message))
+                {
+                    errorMessage = result.Message;
+                }
+                else
+                {
+                    errorMessage = "اسم المستخدم أو كلمة المرور غير صحيحة.";
+                }
+            }
+        }
+        // باقي كود الـ catch يبقى كما هو
+        catch (Exception ex)
+        {
+            errorMessage = $"عذراً، فشل الاتصال بالخادم: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged(); // إعادة الزر لحالته الطبيعية
+        }
+    }
+
+    public class LoginDto
+    {
+        // ⚠️ إضافة قيود التحقق الإجبارية
+        [Required(ErrorMessage = "يرجى إدخال اسم المستخدم")]
+        public string Username { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "يرجى إدخال كلمة المرور")]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    public class LoginResult
+    {
+        public bool Succeeded { get; set; }
+        public bool IsSuccess { get; set; }
+        public string? Message { get; set; }
+        public List<string>? Errors { get; set; }
+        public AuthData? Data { get; set; }
+    }
+
+    public class AuthData
+    {
+        public string Token { get; set; } = string.Empty;
+    }
+}

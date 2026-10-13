@@ -1,0 +1,455 @@
+﻿@page "/admin/users"
+@rendermode InteractiveServer
+@using GovOperationsHub.Domain.Identity
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = AppRoles.SystemAdmin)]
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<PageTitle>إدارة المستخدمين والصلاحيات</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>👥 إدارة المستخدمين والجلسات</h2>
+        <button class="btn btn-primary fw-bold shadow-sm" @onclick="ToggleAddForm">
+            <i class="bi bi-person-plus"></i> مستخدم جديد
+        </button>
+    </div>
+
+    @* رسائل النجاح والخطأ العامة *@
+    @if (!string.IsNullOrEmpty(globalMessage))
+    {
+        <div class="alert @(isSuccessMessage ? "alert-success" : "alert-danger") alert-dismissible fade show" role="alert">
+            @globalMessage
+            <button type="button" class="btn-close" @onclick="() => globalMessage = string.Empty"></button>
+        </div>
+    }
+
+    @* فورم إضافة مستخدم جديد *@
+    @if (showAddForm)
+    {
+        <div class="card shadow-sm mb-4 border-primary">
+            <div class="card-body">
+                <h5 class="card-title text-primary mb-3">إنشاء حساب موظف جديد</h5>
+                <EditForm Model="newUser" OnValidSubmit="SaveUser" FormName="AddUserForm">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label>اسم المستخدم</label>
+                            <InputText @bind-Value="newUser.Username" class="form-control" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label>البريد الإلكتروني</label>
+                            <InputText @bind-Value="newUser.Email" class="form-control" type="email" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label>كلمة المرور (مؤقتة)</label>
+                            <InputText @bind-Value="newUser.Password" class="form-control" type="password" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label>الدور / الصلاحية</label>
+                            <InputSelect @bind-Value="newUser.Role" class="form-select" required>
+                                <option value="">اختر الصلاحية...</option>
+                                <option value="@AppRoles.ContractOfficer">@AppRoles.ContractOfficer</option>
+                                <option value="@AppRoles.ServicesOfficer">@AppRoles.ServicesOfficer</option>
+                                <option value="@AppRoles.NetworkEngineer">@AppRoles.NetworkEngineer</option>
+                                <option value="@AppRoles.MinistryRepresentative">@AppRoles.MinistryRepresentative</option>
+                                <option value="@AppRoles.SystemAdmin">@AppRoles.SystemAdmin</option>
+                            </InputSelect>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-success">حفظ المستخدم</button>
+                        <button type="button" class="btn btn-secondary" @onclick="ToggleAddForm">إلغاء</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
+    @* فورم تعديل مستخدم موجود *@
+    @if (showEditForm && editUser != null)
+    {
+        <div class="card shadow-sm mb-4 border-warning">
+            <div class="card-body">
+                <h5 class="card-title text-warning mb-3">تعديل بيانات المستخدم: @editUserUsername</h5>
+                <EditForm Model="editUser" OnValidSubmit="UpdateUser" FormName="EditUserForm">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label>البريد الإلكتروني</label>
+                            <InputText @bind-Value="editUser.Email" class="form-control" type="email" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label>الدور / الصلاحية</label>
+                            <InputSelect @bind-Value="editUser.NewRole" class="form-select" required>
+                                <option value="@AppRoles.ContractOfficer">@AppRoles.ContractOfficer</option>
+                                <option value="@AppRoles.ServicesOfficer">@AppRoles.ServicesOfficer</option>
+                                <option value="@AppRoles.NetworkEngineer">@AppRoles.NetworkEngineer</option>
+                                <option value="@AppRoles.MinistryRepresentative">@AppRoles.MinistryRepresentative</option>
+                                <option value="@AppRoles.SystemAdmin">@AppRoles.SystemAdmin</option>
+                            </InputSelect>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-warning text-dark fw-bold">حفظ التعديلات</button>
+                        <button type="button" class="btn btn-secondary" @onclick="CancelEdit">إلغاء</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
+    @if (showResetForm && resetPasswordData != null)
+    {
+        <div class="card shadow-sm mb-4 border-danger">
+            <div class="card-body">
+                <h5 class="card-title text-danger mb-3">🔑 إعادة تعيين كلمة المرور للمستخدم: @editUserUsername</h5>
+                <EditForm Model="resetPasswordData" OnValidSubmit="ResetPassword" FormName="ResetPasswordForm">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6">
+                            <label>كلمة المرور الجديدة</label>
+                            <InputText @bind-Value="resetPasswordData.NewPassword" class="form-control" type="password" required />
+                        </div>
+                        <div class="col-md-6">
+                            <button type="submit" class="btn btn-danger fw-bold me-2">تأكيد التغيير</button>
+                            <button type="button" class="btn btn-secondary" @onclick="CancelReset">إلغاء</button>
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
+    @* جدول عرض المستخدمين *@
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0 align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>اسم المستخدم</th>
+                        <th>البريد الإلكتروني</th>
+                        <th>الصلاحيات</th>
+                        <th>حالة الحساب</th>
+                        <th class="text-center">الجلسات النشطة</th>
+                        <th class="text-center">إجراءات الإدارة والأمان</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (users == null)
+                    {
+                        <tr><td colspan="6" class="text-center py-4">جاري التحميل...</td></tr>
+                    }
+                    else if (!users.Any())
+                    {
+                        <tr><td colspan="6" class="text-center py-4">لا يوجد مستخدمين.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var user in users)
+                        {
+                            <tr class="@(user.IsLocked ? "table-danger" : "")">
+                                <td class="fw-bold">@user.Username</td>
+                                <td>@user.Email</td>
+                                <td>
+                                    @foreach (var role in user.Roles)
+                                    {
+                                        <span class="badge bg-info text-dark me-1">@role</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (user.IsLocked)
+                                    {
+                                        <span class="badge bg-danger">محظور</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">نشط</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge @(user.ActiveSessionsCount > 0 ? "bg-primary" : "bg-secondary") rounded-pill">
+                                        @user.ActiveSessionsCount
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    @* زر التعديل *@
+                                    <button class="btn btn-sm btn-outline-warning me-1" title="تعديل" @onclick="() => PrepareEdit(user)">
+                                        ✏️ تعديل
+                                    </button>
+
+                                    @* زر الحظر / فك الحظر *@
+                                    <button class="btn btn-sm @(user.IsLocked ? "btn-success" : "btn-dark") me-1" 
+                                            title="@(user.IsLocked ? "فك الحظر" : "حظر")"
+                                            @onclick="() => ToggleLock(user.Id)">
+                                        @(user.IsLocked ? "🔓 فك الحظر" : "🔒 حظر")
+                                    </button>
+
+                                    @* زر الطرد (إبطال الجلسات) *@
+                                    <button class="btn btn-sm btn-danger" 
+                                            disabled="@(user.ActiveSessionsCount == 0)"
+                                            title="إبطال جميع الجلسات النشطة"
+                                            @onclick="() => RevokeSessions(user.Id)">
+                                        🛑 طرد
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-info me-1" title="إعادة تعيين كلمة المرور" @onclick="() => PrepareResetPassword(user)">
+                                        🔑
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<UserDto>? users;
+    private CreateUserCommand newUser = new("", "", "", "");
+    private UpdateUserCommandDto? editUser;
+    
+    private bool showAddForm = false;
+    private bool showEditForm = false;
+    private string editUserUsername = string.Empty;
+    
+    private string globalMessage = string.Empty;
+    private bool isSuccessMessage = true;
+
+    private bool showResetForm = false;
+    private ResetUserPasswordCommandDto? resetPasswordData;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+
+   private async Task LoadUsers()
+    {
+        try
+        {
+            var response = await Http.GetAsync("api/Users");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ResultModel<List<UserDto>>>();
+                if (result != null && (result.Succeeded || result.IsSuccess))
+                {
+                    users = result.Data ?? new List<UserDto>();
+                }
+                else
+                {
+                    users = new List<UserDto>(); // لإخفاء رسالة جاري التحميل
+                    ShowMessage(result?.Message ?? "فشل في قراءة البيانات", false);
+                }
+            }
+            else
+            {
+                users = new List<UserDto>();
+                ShowMessage($"خطأ من الخادم (API): {response.StatusCode}", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            users = new List<UserDto>();
+            ShowMessage($"خطأ في الاتصال: {ex.Message}", false);
+        }
+        
+        StateHasChanged(); // إجبار الشاشة على التحديث
+    }
+
+    private void ToggleAddForm()
+    {
+        showAddForm = !showAddForm;
+        showEditForm = false; // إخفاء فورم التعديل إن كان مفتوحاً
+        globalMessage = string.Empty;
+        if (!showAddForm) newUser = new("", "", "", "");
+    }
+
+    private async Task SaveUser()
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/Users", newUser);
+            var result = await response.Content.ReadFromJsonAsync<ResultModel<string>>();
+            
+            if (response.IsSuccessStatusCode && result != null && (result.Succeeded || result.IsSuccess))
+            {
+                ShowMessage("تم إضافة المستخدم بنجاح!", true);
+                ToggleAddForm();
+                await LoadUsers();
+            }
+            else
+            {
+                ShowMessage(result?.Message ?? "فشلت عملية الإضافة.", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"خطأ: {ex.Message}", false);
+        }
+    }
+
+    private void PrepareEdit(UserDto user)
+    {
+        showEditForm = true;
+        showAddForm = false;
+        editUserUsername = user.Username;
+        editUser = new UpdateUserCommandDto
+        {
+            UserId = user.Id,
+            Email = user.Email,
+            NewRole = user.Roles.FirstOrDefault() ?? string.Empty
+        };
+    }
+
+    private void CancelEdit()
+    {
+        showEditForm = false;
+        editUser = null;
+    }
+
+    private async Task UpdateUser()
+    {
+        if (editUser == null) return;
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/Users/{editUser.UserId}", editUser);
+            var result = await response.Content.ReadFromJsonAsync<ResultModel<bool>>();
+
+            if (response.IsSuccessStatusCode && result != null && (result.Succeeded || result.IsSuccess))
+            {
+                ShowMessage("تم تحديث بيانات المستخدم بنجاح!", true);
+                CancelEdit();
+                await LoadUsers();
+            }
+            else
+            {
+                ShowMessage(result?.Message ?? "فشل تحديث البيانات.", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"خطأ: {ex.Message}", false);
+        }
+    }
+
+    private async Task ToggleLock(string userId)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"api/Users/{userId}/toggle-lock", null);
+            var result = await response.Content.ReadFromJsonAsync<ResultModel<bool>>();
+
+            if (response.IsSuccessStatusCode && result != null && (result.Succeeded || result.IsSuccess))
+            {
+                ShowMessage(result.Message, true);
+                await LoadUsers(); // تحديث الجدول ليعكس الحالة الجديدة
+            }
+            else
+            {
+                ShowMessage(result?.Message ?? "فشلت العملية.", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"خطأ: {ex.Message}", false);
+        }
+    }
+
+    private async Task RevokeSessions(string userId)
+    {
+        var response = await Http.PostAsync($"api/Users/{userId}/revoke-sessions", null);
+        if (response.IsSuccessStatusCode)
+        {
+            ShowMessage("تم إبطال جميع جلسات المستخدم بنجاح.", true);
+            await LoadUsers();
+        }
+    }
+
+    private void ShowMessage(string message, bool isSuccess)
+    {
+        globalMessage = message;
+        isSuccessMessage = isSuccess;
+    }
+
+    // الكلاسات المساعدة
+    public record CreateUserCommand(string Username, string Email, string Password, string Role)
+    {
+        public string Username { get; set; } = Username;
+        public string Email { get; set; } = Email;
+        public string Password { get; set; } = Password;
+        public string Role { get; set; } = Role;
+    }
+
+    public class UpdateUserCommandDto
+    {
+        public string UserId { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string NewRole { get; set; } = string.Empty;
+    }
+
+    public class UserDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public List<string> Roles { get; set; } = new();
+        public int ActiveSessionsCount { get; set; }
+        public string LastIpAddress { get; set; } = string.Empty;
+        public bool IsLocked { get; set; } // الخاصية الجديدة
+    }
+
+    public class ResultModel<T>
+    {
+        public bool Succeeded { get; set; }
+        public bool IsSuccess { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public T? Data { get; set; }
+    }
+
+    private void PrepareResetPassword(UserDto user)
+    {
+        showResetForm = true;
+        showAddForm = false;
+        showEditForm = false;
+        editUserUsername = user.Username;
+        resetPasswordData = new ResetUserPasswordCommandDto { UserId = user.Id, NewPassword = "" };
+    }
+
+    private void CancelReset()
+    {
+        showResetForm = false;
+        resetPasswordData = null;
+    }
+
+    private async Task ResetPassword()
+    {
+        if (resetPasswordData == null) return;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"api/Users/{resetPasswordData.UserId}/reset-password", resetPasswordData);
+            var result = await response.Content.ReadFromJsonAsync<ResultModel<bool>>();
+
+            if (response.IsSuccessStatusCode && result != null && (result.Succeeded || result.IsSuccess))
+            {
+                ShowMessage("تم تغيير كلمة المرور بنجاح!", true);
+                CancelReset();
+            }
+            else
+            {
+                ShowMessage(result?.Message ?? "فشل تغيير كلمة المرور.", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"خطأ: {ex.Message}", false);
+        }
+    }
+
+    public class ResetUserPasswordCommandDto
+    {
+        public string UserId { get; set; } = string.Empty;
+        public string NewPassword { get; set; } = string.Empty;
+    }
+}

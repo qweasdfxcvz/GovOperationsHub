@@ -1,0 +1,505 @@
+﻿@page "/network-centers"
+@attribute [Authorize]
+@using GovOperationsHub.BlazorWeb.Models
+@inject HttpClient Http
+@rendermode InteractiveServer
+
+<PageTitle>المراكز والربط الشبكي</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="text-primary fw-bold">إدارة مراكز خدمة المواطن والبطاقات الشبكية</h3>
+    <button class="btn btn-success px-4" @onclick="ToggleAddForm">➕ إضافة مركز جديد</button>
+</div>
+
+<!-- نموذج إضافة مركز جديد -->
+@if (showAddForm)
+{
+    <div class="card shadow-sm mb-4 border-0 border-top border-success border-4">
+        <div class="card-body bg-light">
+            <EditForm Model="newCenter" OnValidSubmit="SaveCenter">
+                <div class="row g-3">
+                    <h5 class="text-secondary border-bottom pb-2 mb-3">البيانات الأساسية للمركز</h5>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label">اسم المركز</label>
+                        <InputText @bind-Value="newCenter.Name" class="form-control" placeholder="مثال: مركز خدمة المواطن في المزة" required />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">كود المركز (Code)</label>
+                        <InputText @bind-Value="newCenter.CenterCode" class="form-control" placeholder="CSC-MZ-01" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">الوزارة التابعة</label>
+                        <InputSelect @bind-Value="newCenter.MinistryId" class="form-select">
+                            <option value="">-- غير مباشر (يتبع لمؤسسة) --</option>
+                            @if (ministries != null)
+                            {
+                                @foreach (var min in ministries)
+                                {
+                                    <option value="@min.Id">@min.Name</option>
+                                }
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">أو المؤسسة/الهيئة التابعة</label>
+                        <InputSelect @bind-Value="newCenter.GovernmentEntityId" class="form-select">
+                            <option value="">-- غير مباشر (يتبع لوزارة) --</option>
+                            @if (governmentEntities != null)
+                            {
+                                @foreach (var entity in governmentEntities)
+                                {
+                                    <option value="@entity.Id">@entity.Name</option>
+                                }
+                            }
+                        </InputSelect>
+                    </div>
+
+                    <h5 class="text-secondary border-bottom pb-2 mb-3 mt-4">الموقع الجغرافي والتصنيف</h5>
+
+                    <div class="col-md-3">
+                        <label class="form-label">المحافظة</label>
+                        <InputSelect @bind-Value="newCenter.Governorate" class="form-select">
+                            @foreach (var gov in governorates)
+                            {
+                                <option value="@gov.Key">@gov.Value</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">المدينة / المنطقة</label>
+                        <InputText @bind-Value="newCenter.City" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">العنوان التفصيلي</label>
+                        <InputText @bind-Value="newCenter.DetailedAddress" class="form-control" />
+                    </div>
+
+                    <div class="col-md-12 mt-3">
+                        <label class="form-label d-block fw-bold mb-2">تصنيفات المركز (يمكن اختيار أكثر من تصنيف):</label>
+                        <div class="form-check form-check-inline">
+                            <InputCheckbox @bind-Value="newCenter.IsMainCenter" class="form-check-input" id="chkMain" />
+                            <label class="form-check-label" for="chkMain">مركز رئيسي</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <InputCheckbox @bind-Value="newCenter.IsBranchCenter" class="form-check-input" id="chkBranch" />
+                            <label class="form-check-label" for="chkBranch">مركز فرعي</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <InputCheckbox @bind-Value="newCenter.IsDeliveryCenter" class="form-check-input" id="chkDelivery" />
+                            <label class="form-check-label" for="chkDelivery">مركز تسليم (للمنصة)</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <InputCheckbox @bind-Value="newCenter.IsSpecializedCenter" class="form-check-input" id="chkSpecial" />
+                            <label class="form-check-label" for="chkSpecial">مركز تخصصي</label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-12 text-end mt-4">
+                        <button type="button" class="btn btn-secondary me-2" @onclick="ToggleAddForm">إلغاء</button>
+                        <button type="submit" class="btn btn-primary px-5">حفظ المركز</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<!-- جدول استعراض المراكز وحالة الشبكة -->
+@if (centers == null)
+{
+    <div class="text-center mt-5"><div class="spinner-border text-primary"></div> جاري التحميل...</div>
+}
+else if (!centers.Any())
+{
+    <div class="alert alert-warning">لا يوجد مراكز خدمة مواطن مسجلة في النظام.</div>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>الكود</th>
+                        <th>اسم المركز</th>
+                        <th>التبعية</th>
+                        <th>الموقع</th>
+                        <th>التصنيفات</th>
+                        <th>حالة الشبكة (IP)</th>
+                        <th class="text-end">البطاقة الشبكية</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var center in centers)
+                    {
+                        <tr>
+                            <td><span class="badge bg-secondary">@center.CenterCode</span></td>
+                            <td class="fw-bold">@center.Name</td>
+                            <td>@center.AffiliationName</td>
+                            <td>@center.GovernorateArabic<br /><small class="text-muted">@center.City</small></td>
+                            <td>
+                                @foreach (var cls in center.Classifications)
+                                {
+                                    <span class="badge bg-light text-dark border me-1">@cls</span>
+                                }
+                            </td>
+                            <td>
+                                @if (center.HasActiveNetworkConfig)
+                                {
+                                    <span class="badge bg-success">
+                                        🌐 متصل (@center.CurrentIpAddress)
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">🚫 غير متصل / قيد التجهيز</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-primary fw-bold" @onclick="() => ManageNetwork(center.Id)">
+                                    💳 إعدادات الراوتر والشبكة
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<!-- نافذة إدارة البطاقة الشبكية (الراوترات والاتصال) -->
+@if (showNetworkModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">
+                        💳 تحديث البطاقة الشبكية للمركز
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showNetworkModal = false"></button>
+                </div>
+                <div class="modal-body bg-light">
+                    <EditForm Model="networkConfig" OnValidSubmit="SaveNetworkConfig">
+                        
+                        <div class="row g-3">
+                            <!-- 1. التوثيق الرسمي -->
+                            <div class="col-12">
+                                <h6 class="text-primary border-bottom pb-2">📄 التوثيق الرسمي وسبب التعديل</h6>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">سبب التعديل</label>
+                                <InputSelect @bind-Value="networkConfig.ChangeReason" class="form-select">
+                                    <option value="1">تأسيس أولي (Initial Setup)</option>
+                                    <option value="2">ترقية تجهيزات (Hardware Upgrade)</option>
+                                    <option value="3">تغيير IP (IP Change)</option>
+                                    <option value="4">صيانة وإصلاح (Maintenance)</option>
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">رقم الكتاب الرسمي / التذكرة</label>
+                                <InputText @bind-Value="networkConfig.OfficialLetterOrTicketNumber" class="form-control" required />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">تاريخ الكتاب الرسمي</label>
+                                <InputDate @bind-Value="networkConfig.OfficialLetterDate" class="form-control" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">ملاحظات التعديل</label>
+                                <InputText @bind-Value="networkConfig.ChangeDescription" class="form-control" />
+                            </div>
+
+                            <!-- 2. إعدادات الشبكة -->
+                            <div class="col-12 mt-3">
+                                <h6 class="text-primary border-bottom pb-2">🌐 إعدادات الشبكة والـ IP</h6>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">نوع الاتصال</label>
+                                <InputSelect @bind-Value="networkConfig.ConnectionType" class="form-select">
+                                    <option value="1">ألياف ضوئية (Fiber Optic)</option>
+                                    <option value="2">مايكروويف (Microwave)</option>
+                                    <option value="3">ADSL / VDSL</option>
+                                    <option value="4">خط مؤجر (Leased Line)</option>
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">عنوان الـ IP (IPv4)</label>
+                                <InputText @bind-Value="networkConfig.IpAddress" class="form-control" placeholder="192.168.1.10" dir="ltr" required />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">البوابة (Gateway)</label>
+                                <InputText @bind-Value="networkConfig.Gateway" class="form-control" placeholder="192.168.1.1" dir="ltr" required />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">قناع الشبكة</label>
+                                <InputText @bind-Value="networkConfig.SubnetMask" class="form-control" placeholder="255.255.255.0" dir="ltr" required />
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">المنفذ (Port)</label>
+                                <InputNumber @bind-Value="networkConfig.Port" class="form-control" dir="ltr" />
+                            </div>
+
+                            <!-- 3. مواصفات الخادم والارتباط -->
+                            <div class="col-12 mt-3">
+                                <h6 class="text-primary border-bottom pb-2">🖥️ مواصفات الخادم والارتباط</h6>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">مواصفات الخادم (VM)</label>
+                                <InputText @bind-Value="networkConfig.VmSpecifications" class="form-control" placeholder="4 vCPU, 16GB RAM, 200GB SSD" dir="ltr" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">اسم الدومين</label>
+                                <InputText @bind-Value="networkConfig.DomainName" class="form-control" placeholder="csc.gov.sy" dir="ltr" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">الرابط المخصص للمركز</label>
+                                <InputText @bind-Value="networkConfig.DedicatedCenterUrl" class="form-control" placeholder="https://csc.gov.sy" dir="ltr" required />
+                            </div>
+                            <div class="col-md-12">
+                                <div class="form-check form-switch mt-2">
+                                    <InputCheckbox @bind-Value="networkConfig.IsJoinedToDomain" class="form-check-input" id="domainCheck" />
+                                    <label class="form-check-label fw-bold" for="domainCheck">السيرفر مرتبط بالدومين المركزي (Joined to Domain)</label>
+                                </div>
+                            </div>
+
+                            <!-- 4. التجهيزات وقواعد البيانات -->
+                            <div class="col-12 mt-3">
+                                <h6 class="text-primary border-bottom pb-2">🔒 التجهيزات وقواعد البيانات (مُشفرة)</h6>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">نوع تجهيزة الراوتر</label>
+                                <InputText @bind-Value="networkConfig.RouterHardwareType" class="form-control" placeholder="Cisco 2911" required />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">الرقم التسلسلي للراوتر (S/N)</label>
+                                <InputText @bind-Value="networkConfig.RouterSerialNumber" class="form-control" placeholder="FHK09432..." dir="ltr" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">اسم قاعدة البيانات</label>
+                                <InputText @bind-Value="networkConfig.DatabaseName" class="form-control" placeholder="GovCenter_DB" required />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">مستخدم قاعدة البيانات</label>
+                                <InputText @bind-Value="networkConfig.DatabaseUserName" class="form-control" placeholder="sa" required />
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="form-label text-danger fw-bold">كلمة مرور Database</label>
+                                <InputText @bind-Value="networkConfig.DatabasePassword" type="password" class="form-control" placeholder="تُشفر آلياً" required />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-danger fw-bold">بيانات دخول الراوتر</label>
+                                <InputText @bind-Value="networkConfig.RouterCredentials" type="password" class="form-control" placeholder="تُشفر آلياً" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">ملاحظات فنية إضافية</label>
+                                <InputText @bind-Value="networkConfig.AdditionalTechnicalNotes" class="form-control" placeholder="أي ملاحظات حول الصلاحيات أو إعدادات الجدار الناري..." />
+                            </div>
+                        </div>
+                        
+                        @if (!string.IsNullOrEmpty(networkErrorMessage))
+                        {
+                            <div class="alert alert-danger mt-3 fw-bold">@networkErrorMessage</div>
+                        }
+
+                        <div class="modal-footer px-0 pb-0 mt-4 border-0">
+                            <button type="button" class="btn btn-secondary" @onclick="() => showNetworkModal = false">إلغاء</button>
+                            <button type="submit" class="btn btn-primary px-5 fw-bold shadow-sm">حفظ وتشفير البيانات</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<CitizenCenterDto>? centers;
+    private List<DropdownDto>? ministries;
+    private List<DropdownDto>? governmentEntities;
+    private bool showNetworkModal = false;
+    private string networkErrorMessage = string.Empty;
+    private UpdateNetworkConfigDto networkConfig = new();
+    
+    private CreateCitizenCenterDto newCenter = new() { Governorate = 1 }; // الافتراضي دمشق
+    private bool showAddForm = false;
+
+    // قائمة ثابتة بالمحافظات السورية لملء القائمة المنسدلة
+    private readonly Dictionary<int, string> governorates = new()
+    {
+        { 1, "دمشق" }, { 2, "ريف دمشق" }, { 3, "حلب" }, { 4, "حمص" },
+        { 5, "حماة" }, { 6, "اللاذقية" }, { 7, "طرطوس" }, { 8, "إدلب" },
+        { 9, "درعا" }, { 10, "السويداء" }, { 11, "القنيطرة" }, { 12, "دير الزور" },
+        { 13, "الرقة" }, { 14, "الحسكة" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCenters();
+        await LoadDropdowns();
+    }
+
+    private async Task LoadCenters()
+    {
+        var response = await Http.GetFromJsonAsync<Result<List<CitizenCenterDto>>>("api/CitizenCenters");
+        if (response != null && response.Succeeded)
+        {
+            centers = response.Data;
+        }
+    }
+
+    private async Task LoadDropdowns()
+    {
+        // جلب الوزارات
+        var minResp = await Http.GetFromJsonAsync<Result<List<DropdownDto>>>("api/Ministries");
+        if (minResp != null && minResp.Succeeded) ministries = minResp.Data;
+
+        // جلب المؤسسات
+        var entResp = await Http.GetFromJsonAsync<Result<List<DropdownDto>>>("api/GovernmentEntities");
+        if (entResp != null && entResp.Succeeded) governmentEntities = entResp.Data;
+    }
+
+    private void ToggleAddForm() => showAddForm = !showAddForm;
+
+    private async Task SaveCenter()
+    {
+        var response = await Http.PostAsJsonAsync("api/CitizenCenters", newCenter);
+        if (response.IsSuccessStatusCode)
+        {
+            newCenter = new() { Governorate = 1 };
+            showAddForm = false;
+            await LoadCenters();
+        }
+    }
+
+    private void ManageNetwork(int centerId)
+    {
+        networkErrorMessage = string.Empty;
+    // تجهيز النموذج وتمرير رقم المركز
+    networkConfig = new UpdateNetworkConfigDto 
+    { 
+        CitizenServiceCenterId = centerId,
+        ChangeReason = 1, // افتراضي: تأسيس أولي
+        ConnectionType = 1, // افتراضي: فايبر
+        SubnetMask = "255.255.255.0",
+        Port = 80
+    };
+    showNetworkModal = true;
+    }
+
+    // دالة إرسال التحديث للـ API
+private async Task SaveNetworkConfig()
+{
+    networkErrorMessage = string.Empty;
+    
+    var apiUrl = "https://localhost:7241/api/NetworkConfigurations/update";
+    
+    var response = await Http.PostAsJsonAsync(apiUrl, networkConfig);
+    
+    if (response.IsSuccessStatusCode)
+    {
+        showNetworkModal = false;
+        await LoadCenters(); // إعادة تحميل المراكز ليتغير لون الـ Badge إلى "متصل"
+    }
+    else
+    {
+        // 1. نقرأ الاستجابة كنص عادي أولاً لتجنب انهيار النظام إذا كانت فارغة
+        var errorText = await response.Content.ReadAsStringAsync();
+        
+        if (string.IsNullOrWhiteSpace(errorText))
+        {
+            networkErrorMessage = $"حدث خطأ في الخادم (رمز الخطأ: {(int)response.StatusCode}). الرابط غير موجود أو السيرفر متوقف.";
+            return;
+        }
+
+        // 2. نحاول تحويل النص إلى كائن Result الخاص بنا بأمان
+        try
+        {
+            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var errorResult = System.Text.Json.JsonSerializer.Deserialize<Result<int>>(errorText, options);
+            
+            // إذا كان هناك أخطاء Validation نعرض أول خطأ
+            if (errorResult?.Errors != null && errorResult.Errors.Any())
+            {
+                networkErrorMessage = string.Join(" | ", errorResult.Errors);
+            }
+            else
+            {
+                networkErrorMessage = errorResult?.Message ?? "حدث خطأ أثناء حفظ الإعدادات، تأكد من صحة البيانات.";
+            }
+        }
+        catch
+        {
+            // إذا كانت الاستجابة ليست JSON (مثلاً صفحة HTML لخطأ 500)
+            networkErrorMessage = "حدث خطأ تقني غير متوقع. يرجى مراجعة سجلات السيرفر.";
+        }
+    }
+}
+
+    // DTOs
+    public class CitizenCenterDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string CenterCode { get; set; } = "";
+        public string GovernorateArabic { get; set; } = "";
+        public string City { get; set; } = "";
+        public string AffiliationName { get; set; } = "";
+        public List<string> Classifications { get; set; } = new();
+        public bool HasActiveNetworkConfig { get; set; }
+        public string CurrentIpAddress { get; set; } = "";
+    }
+
+    public class DropdownDto { public int Id { get; set; } public string Name { get; set; } = ""; }
+
+    public class CreateCitizenCenterDto
+    {
+        public string Name { get; set; } = "";
+        public string CenterCode { get; set; } = "";
+        public int Governorate { get; set; }
+        public string City { get; set; } = "";
+        public string DetailedAddress { get; set; } = "";
+        public bool IsMainCenter { get; set; }
+        public bool IsBranchCenter { get; set; }
+        public bool IsDeliveryCenter { get; set; }
+        public bool IsSpecializedCenter { get; set; }
+        public int? MinistryId { get; set; }
+        public int? GovernmentEntityId { get; set; }
+    }
+    public class UpdateNetworkConfigDto
+    {
+        public int CitizenServiceCenterId { get; set; }
+    
+    // 1. التوثيق الرسمي
+    public int ChangeReason { get; set; } = 1;
+    public string? ChangeDescription { get; set; }
+    public string OfficialLetterOrTicketNumber { get; set; } = string.Empty;
+    public DateTime? OfficialLetterDate { get; set; } = DateTime.Today;
+
+    // 2. إعدادات الشبكة
+    public int ConnectionType { get; set; } = 1;
+    public string IpAddress { get; set; } = string.Empty;
+    public string SubnetMask { get; set; } = "255.255.255.0";
+    public string Gateway { get; set; } = string.Empty;
+    public int Port { get; set; } = 80;
+
+    // 3. التجهيزات والأصول
+    public string RouterHardwareType { get; set; } = string.Empty;
+    public string? RouterSerialNumber { get; set; }
+    
+    // 4. مواصفات الخادم والارتباط
+    public string VmSpecifications { get; set; } = string.Empty;
+    public string DomainName { get; set; } = string.Empty;
+    public string DedicatedCenterUrl { get; set; } = string.Empty;
+    public bool IsJoinedToDomain { get; set; }
+    
+    // 5. قواعد البيانات والبيانات المشفرة
+    public string DatabaseName { get; set; } = string.Empty;
+    public string DatabaseUserName { get; set; } = string.Empty;
+    public string DatabasePassword { get; set; } = string.Empty;
+    public string? RouterCredentials { get; set; }
+    public string? AdditionalTechnicalNotes { get; set; }
+    }
+}

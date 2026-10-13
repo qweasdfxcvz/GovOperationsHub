@@ -1,0 +1,186 @@
+﻿@page "/government-entities"
+@using GovOperationsHub.BlazorWeb.Models
+@inject HttpClient Http
+@rendermode InteractiveServer
+
+<PageTitle>إدارة المؤسسات والهيئات</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="text-primary fw-bold">إدارة الهيئات والمؤسسات الحكومية</h3>
+    <button class="btn btn-success px-4" @onclick="ToggleAddForm">➕ إضافة جهة جديدة</button>
+</div>
+
+@if (showAddForm)
+{
+    <div class="card shadow-sm mb-4 border-0 border-top border-success border-4">
+        <div class="card-body bg-light">
+            <EditForm Model="newEntity" OnValidSubmit="SaveEntity">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">اسم المؤسسة/الهيئة</label>
+                        <InputText @bind-Value="newEntity.Name" class="form-control" placeholder="مثال: محافظة دمشق" required />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">نوع الجهة</label>
+                        <InputSelect @bind-Value="newEntity.EntityType" class="form-select">
+                            <option value="1">هيئة عامة</option>
+                            <option value="2">شركة عامة</option>
+                            <option value="3">مديرية مستقلة</option>
+                            <option value="4">مؤسسة عامة</option>
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">الوزارة التابعة لها</label>
+                        <InputSelect @bind-Value="newEntity.MinistryId" class="form-select" required>
+                            <option value="">-- اختر الوزارة --</option>
+                            @if (ministries != null)
+                            {
+                                @foreach (var min in ministries)
+                                {
+                                    <option value="@min.Id">@min.Name</option>
+                                }
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">اسم المدير/الرئيس</label>
+                        <InputText @bind-Value="newEntity.DirectorName" class="form-control" />
+                    </div>
+                    <div class="col-md-9">
+                        <label class="form-label">العنوان التفصيلي</label>
+                        <InputText @bind-Value="newEntity.Address" class="form-control" placeholder="المحافظة - المنطقة..." />
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">حفظ البيانات</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (governmentEntities == null)
+{
+    <div class="text-center mt-5"><div class="spinner-border text-primary"></div> جاري التحميل...</div>
+}
+else if (!governmentEntities.Any())
+{
+    <div class="alert alert-warning">لا يوجد مؤسسات مسجلة في النظام.</div>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-borderless align-middle mb-0">
+                <thead class="table-light border-bottom">
+                    <tr>
+                        <th>اسم المؤسسة</th>
+                        <th>التصنيف</th>
+                        <th>الوزارة التابعة لها</th>
+                        <th>المدير المسؤول</th>
+                        <th>جهات الاتصال</th>
+                        <th class="text-end">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entity in governmentEntities)
+                    {
+                        <tr>
+                            <td class="fw-bold text-primary">@entity.Name</td>
+                            <td><span class="badge bg-secondary">@entity.EntityTypeArabic</span></td>
+                            <td>@entity.MinistryName</td>
+                            <td>@entity.DirectorName</td>
+                            <td>
+                                <span class="badge bg-info text-dark rounded-pill px-3">@entity.ContactsCount جهة</span>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteEntity(entity.Id)">
+                                    🗑️ حذف
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<GovernmentEntityDto>? governmentEntities;
+    private List<MinistryDropdownDto>? ministries;
+    private CreateGovernmentEntityDto newEntity = new() { EntityType = 1 }; // القيمة الافتراضية "هيئة عامة"
+    private bool showAddForm = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEntities();
+        await LoadMinistriesForDropdown();
+    }
+
+    private async Task LoadEntities()
+    {
+        var response = await Http.GetFromJsonAsync<Result<List<GovernmentEntityDto>>>("api/GovernmentEntities");
+        if (response != null && response.Succeeded)
+        {
+            governmentEntities = response.Data;
+        }
+    }
+
+    private async Task LoadMinistriesForDropdown()
+    {
+        var response = await Http.GetFromJsonAsync<Result<List<MinistryDropdownDto>>>("api/Ministries");
+        if (response != null && response.Succeeded)
+        {
+            ministries = response.Data;
+        }
+    }
+
+    private void ToggleAddForm() => showAddForm = !showAddForm;
+
+    private async Task SaveEntity()
+    {
+        var response = await Http.PostAsJsonAsync("api/GovernmentEntities", newEntity);
+        if (response.IsSuccessStatusCode)
+        {
+            newEntity = new() { EntityType = 1 };
+            showAddForm = false;
+            await LoadEntities();
+        }
+    }
+
+    private async Task DeleteEntity(int id)
+    {
+        var response = await Http.DeleteAsync($"api/GovernmentEntities/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            await LoadEntities();
+        }
+    }
+
+    // DTOs للواجهة
+    public class GovernmentEntityDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string EntityTypeArabic { get; set; } = "";
+        public string DirectorName { get; set; } = "";
+        public string MinistryName { get; set; } = "";
+        public int ContactsCount { get; set; }
+    }
+
+    public class MinistryDropdownDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    public class CreateGovernmentEntityDto
+    {
+        public string Name { get; set; } = "";
+        public int EntityType { get; set; }
+        public string DirectorName { get; set; } = "";
+        public string Address { get; set; } = "";
+        public int MinistryId { get; set; }
+    }
+}

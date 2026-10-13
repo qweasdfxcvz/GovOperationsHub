@@ -1,0 +1,144 @@
+﻿@page "/ministries"
+@using GovOperationsHub.BlazorWeb.Models
+@inject HttpClient Http
+@rendermode InteractiveServer
+
+<PageTitle>إدارة الوزارات</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="text-primary fw-bold">إدارة الوزارات</h3>
+    <button class="btn btn-success px-4" @onclick="ToggleAddForm">➕ إضافة وزارة جديدة</button>
+</div>
+
+@if (showAddForm)
+{
+    <div class="card shadow-sm mb-4 border-0 border-top border-success border-4">
+        <div class="card-body bg-light">
+            <EditForm Model="newMinistry" OnValidSubmit="SaveMinistry">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">اسم الوزارة</label>
+                        <InputText @bind-Value="newMinistry.Name" class="form-control" placeholder="مثال: وزارة الاتصالات والتقانة" required />
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">الرمز (Code)</label>
+                        <InputText @bind-Value="newMinistry.Code" class="form-control" placeholder="MOCT" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">الوزير / الممثل الرسمي</label>
+                        <InputText @bind-Value="newMinistry.MinisterOrRepresentative" class="form-control" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">حفظ البيانات</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (ministries == null)
+{
+    <div class="text-center mt-5"><div class="spinner-border text-primary"></div> جاري التحميل...</div>
+}
+else if (!ministries.Any())
+{
+    <div class="alert alert-warning">لا يوجد وزارات مسجلة في النظام.</div>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-borderless align-middle mb-0">
+                <thead class="table-light border-bottom">
+                    <tr>
+                        <th>الرمز</th>
+                        <th>اسم الوزارة</th>
+                        <th>الممثل الرسمي</th>
+                        <th>جهات الاتصال</th>
+                        <th class="text-end">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ministry in ministries)
+                    {
+                        <tr>
+                            <td><span class="badge bg-secondary">@ministry.Code</span></td>
+                            <td class="fw-bold">@ministry.Name</td>
+                            <td>@ministry.MinisterOrRepresentative</td>
+                            <td>
+                                <span class="badge bg-info text-dark rounded-pill px-3">@ministry.ContactsCount جهة</span>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteMinistry(ministry.Id)">
+                                    🗑️ حذف
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<MinistryDto>? ministries;
+    private CreateMinistryDto newMinistry = new();
+    private bool showAddForm = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMinistries();
+    }
+
+    private async Task LoadMinistries()
+    {
+        var response = await Http.GetFromJsonAsync<Result<List<MinistryDto>>>("api/Ministries");
+        if (response != null && response.Succeeded)
+        {
+            ministries = response.Data;
+        }
+    }
+
+    private void ToggleAddForm() => showAddForm = !showAddForm;
+
+    private async Task SaveMinistry()
+    {
+        var response = await Http.PostAsJsonAsync("api/Ministries", newMinistry);
+        if (response.IsSuccessStatusCode)
+        {
+            newMinistry = new(); // تصفير الحقول
+            showAddForm = false;
+            await LoadMinistries(); // تحديث الجدول
+        }
+    }
+
+    private async Task DeleteMinistry(int id)
+    {
+        // سيتم إرسال طلب للحذف المرن (Soft Delete) وسوف تختفي من القائمة فوراً بفضل الـ Global Filter في الـ API
+        var response = await Http.DeleteAsync($"api/Ministries/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            await LoadMinistries();
+        }
+    }
+
+    // DTOs للاستخدام داخل واجهة Blazor
+    public class MinistryDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Code { get; set; } = "";
+        public string MinisterOrRepresentative { get; set; } = "";
+        public int ContactsCount { get; set; }
+    }
+
+    public class CreateMinistryDto
+    {
+        public string Name { get; set; } = "";
+        public string Code { get; set; } = "";
+        public string MinisterOrRepresentative { get; set; } = "";
+        public string Address { get; set; } = "";
+    }
+}

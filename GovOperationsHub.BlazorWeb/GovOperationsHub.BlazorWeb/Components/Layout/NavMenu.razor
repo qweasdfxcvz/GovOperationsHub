@@ -1,0 +1,83 @@
+﻿@using GovOperationsHub.Domain.Identity
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">GovOperationsHub</a>
+    </div>
+</div>
+
+<div class="nav-scrollable">
+    <nav class="flex-column">
+
+        @* 1. روابط عامة (تظهر لأي موظف مسجل الدخول) *@
+        <AuthorizeView>
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                        <span class="bi bi-house-door" aria-hidden="true"></span> الرئيسية
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="my-tasks">
+                        <span class="bi bi-inbox" aria-hidden="true"></span> صندوق المهام
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        @* 2. روابط الإدارة المركزية (تظهر لمدير النظام فقط) *@
+        <AuthorizeView Roles="@AppRoles.SystemAdmin">
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/users">
+                        <span class="bi bi-people" aria-hidden="true"></span> إدارة المستخدمين
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="Contracts">
+                        <span class="bi bi-file-earmark-text" aria-hidden="true"></span> إدارة العقود
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="Ministries">
+                        <span class="bi bi-bank" aria-hidden="true"></span> إدارة الوزارات
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="GovernmentEntities">
+                        <span class="bi bi-diagram-3" aria-hidden="true"></span> الكيانات الحكومية
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        @* 3. روابط البنية التحتية (تظهر لمهندس الشبكات ومدير النظام) *@
+        <AuthorizeView Roles="@($"{AppRoles.NetworkEngineer},{AppRoles.SystemAdmin}")">
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="network-centers">
+                        <span class="bi bi-hdd-network" aria-hidden="true"></span> المراكز والشبكات
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        @* نموذج تسجيل الخروج الآمن (يظهر للجميع دائماً في الأسفل) *@
+        <AuthorizeView>
+            <Authorized>
+                <div class="nav-item px-3 mt-4 border-top pt-3">
+                    <form action="/auth/signout" method="get">
+                        <button type="submit" class="nav-link btn btn-link text-danger w-100 text-start">
+                            <span class="bi bi-box-arrow-right" aria-hidden="true"></span> تسجيل الخروج
+                        </button>
+                    </form>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+    </nav>
+</div>
+
+@code {
+    // يمكنك ترك قسم الأكواد فارغاً هنا ما لم تكن تستخدم دوالاً إضافية لطي القائمة (Toggle Nav)
+}
