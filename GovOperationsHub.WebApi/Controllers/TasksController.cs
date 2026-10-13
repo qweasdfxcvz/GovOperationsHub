@@ -6,25 +6,14 @@ namespace GovOperationsHub.WebApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    // 🚨 أزلنا [Authorize] لأن HttpClient الداخلي لا يرسل الـ Cookie
     public class TasksController : ApiControllerBase
     {
         [HttpGet("my-pending")]
-        public async Task<IActionResult> GetMyPendingTasks()
+        public async Task<IActionResult> GetMyPendingTasks([FromQuery] string roles)
         {
-            var rolesHeader = Request.Headers["X-User-Roles"].ToString();
-
-            var decodedRoles = string.Empty;
-            if (!string.IsNullOrEmpty(rolesHeader))
-            {
-                // 🚀 فك التشفير (Base64) لاسترجاع الحروف العربية كما كانت
-                var bytes = Convert.FromBase64String(rolesHeader);
-                decodedRoles = System.Text.Encoding.UTF8.GetString(bytes);
-            }
-
-            var userRoles = string.IsNullOrEmpty(decodedRoles)
+            var userRoles = string.IsNullOrEmpty(roles)
                 ? new List<string>()
-                : decodedRoles.Split(',').ToList();
+                : Uri.UnescapeDataString(roles).Split(',').ToList();
 
             var query = new GetMyPendingTasksQuery(userRoles);
             var result = await Mediator.Send(query);

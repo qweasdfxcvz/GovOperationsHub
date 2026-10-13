@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\GovOperationsHub.Application\GovOperationsHub.Application.csproj" />
     <ProjectReference Include="..\..\GovOperationsHub.Domain\GovOperationsHub.Domain.csproj" />
     <ProjectReference Include="..\GovOperationsHub.BlazorWeb.Client\GovOperationsHub.BlazorWeb.Client.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />

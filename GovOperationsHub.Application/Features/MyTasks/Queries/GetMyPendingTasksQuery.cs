@@ -30,58 +30,36 @@ namespace GovOperationsHub.Application.Features.MyTasks.Queries
 
         public async Task<Result<List<PendingTaskDto>>> Handle(GetMyPendingTasksQuery request, CancellationToken cancellationToken)
         {
-            try
-            {
-                var allowedTracks = new List<int>();
+            var allowedTracks = new List<int>();
+            var roles = request.UserRoles.Select(r => r.Trim().ToLower()).ToList();
 
-                // 1. تنظيف الصلاحيات (إزالة المسافات الزائدة وتحويلها لأحرف صغيرة لضمان التطابق 100%)
-                var roles = request.UserRoles.Select(r => r.Trim().ToLower()).ToList();
+            if (roles.Contains("systemadmin") || roles.Contains("networkengineer")) allowedTracks.Add(1);
+            if (roles.Contains("systemadmin") || roles.Contains("servicesofficer")) allowedTracks.Add(2);
+            if (roles.Contains("systemadmin") || roles.Contains("finance")) allowedTracks.Add(3);
 
-                if (roles.Contains("systemadmin") || roles.Contains("networkengineer")) allowedTracks.Add(1);
-                if (roles.Contains("systemadmin") || roles.Contains("servicesofficer")) allowedTracks.Add(2);
-                if (roles.Contains("systemadmin") || roles.Contains("finance")) allowedTracks.Add(3);
+            if (!allowedTracks.Any())
+                return Result<List<PendingTaskDto>>.Success(new List<PendingTaskDto>());
 
-                // 2. إذا لم يتعرف على الصلاحية، سيرجع لك رسالة حمراء تخبرك بما قرأه بالضبط
-                if (!allowedTracks.Any())
+            var pendingTasks = await _context.SlaStageTrackers
+                .Include(t => t.ContractAnnex).ThenInclude(a => a.Contract)
+                .Include(t => t.ContractAnnex).ThenInclude(a => a.TargetCenter)
+                .Where(t => t.Status == WorkflowStageStatus.InProgress && allowedTracks.Contains(t.TrackNumber))
+                .OrderBy(t => t.ExpectedCompletionDate)
+                .Select(t => new PendingTaskDto
                 {
-                    return Result<List<PendingTaskDto>>.Failure($"تم الاتصال بنجاح. لكن أدوارك المقروءة: ({string.Join(" | ", request.UserRoles)}) لا تملك صلاحية لرؤية أي مسار عمل.");
-                }
+                    TaskId = t.Id,
+                    // EF Core يقوم بمعالجة القيم الفارغة (nulls) هنا تلقائياً بدون تعقيد
+                    ContractNumber = t.ContractAnnex.Contract.ContractNumber,
+                    AnnexNumber = t.ContractAnnex.AnnexNumber,
+                    CenterName = t.ContractAnnex.TargetCenter.Name,
+                    StageName = t.StageName,
+                    ExpectedCompletionDate = t.ExpectedCompletionDate,
+                    TrackNumber = t.TrackNumber
+                })
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
 
-                var pendingTasks = await _context.SlaStageTrackers
-                    .Include(t => t.ContractAnnex).ThenInclude(a => a.Contract)
-                    .Include(t => t.ContractAnnex).ThenInclude(a => a.TargetCenter)
-                    .Where(t => t.Status == WorkflowStageStatus.InProgress && allowedTracks.Contains(t.TrackNumber))
-                    .OrderBy(t => t.ExpectedCompletionDate)
-                    .Select(t => new PendingTaskDto
-                    {
-                        TaskId = t.Id,
-                        ContractNumber = t.ContractAnnex != null && t.ContractAnnex.Contract != null ? t.ContractAnnex.Contract.ContractNumber : "غير متوفر",
-                        AnnexNumber = t.ContractAnnex != null ? t.ContractAnnex.AnnexNumber : "غير متوفر",
-                        CenterName = t.ContractAnnex != null && t.ContractAnnex.TargetCenter != null ? t.ContractAnnex.TargetCenter.Name : "غير متوفر",
-                        StageName = t.StageName,
-                        ExpectedCompletionDate = t.ExpectedCompletionDate,
-                        TrackNumber = t.TrackNumber
-                    })
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken);
-
-                // 3. الرادار الكاشف لقاعدة البيانات
-                if (!pendingTasks.Any())
-                {
-                    var totalTasks = await _context.SlaStageTrackers.CountAsync(cancellationToken);
-                    var inProgressTasks = await _context.SlaStageTrackers.CountAsync(t => t.Status == WorkflowStageStatus.InProgress, cancellationToken);
-
-                    return Result<List<PendingTaskDto>>.Failure(
-                        $"الأدوار صالحة ({string.Join(",", roles)})، لكن لا يوجد مهام لك. " +
-                        $"إحصائيات الداتا بيز -> إجمالي المهام: {totalTasks} | المهام الفعالة عموماً: {inProgressTasks}");
-                }
-
-                return Result<List<PendingTaskDto>>.Success(pendingTasks);
-            }
-            catch (Exception ex)
-            {
-                return Result<List<PendingTaskDto>>.Failure($"خطأ في الداتا بيز: {ex.Message}");
-            }
+            return Result<List<PendingTaskDto>>.Success(pendingTasks);
         }
     }
 }

@@ -44,6 +44,8 @@ builder.Services.AddScoped(sp =>
     };
 });
 
+
+
 builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();

@@ -13,7 +13,6 @@
     </button>
 </div>
 
-@* نظام الإشعارات *@
 @if (!string.IsNullOrEmpty(globalMessage))
 {
     <div class="alert @(isSuccessMessage ? "alert-success" : "alert-danger") alert-dismissible fade show shadow-sm" role="alert">
@@ -26,7 +25,7 @@
 {
     <div class="text-center mt-5">
         <div class="spinner-border text-primary" role="status"></div>
-        <p class="mt-2 fw-bold text-muted">جاري الاتصال بالخادم...</p>
+        <p class="mt-2 fw-bold text-muted">جاري تحميل المهام...</p>
     </div>
 }
 else if (!tasks.Any())
@@ -34,7 +33,7 @@ else if (!tasks.Any())
     <div class="alert alert-success text-center py-5 shadow-sm border-0 mt-4">
         <h1 class="display-1 text-success mb-3">🎉</h1>
         <h4 class="fw-bold">صندوق المهام فارغ!</h4>
-        <p class="text-muted">لا يوجد لديك أي مهام معلقة في الوقت الحالي. عمل ممتاز!</p>
+        <p class="text-muted">لا يوجد لديك أي مهام معلقة في الوقت الحالي.</p>
     </div>
 }
 else
@@ -56,29 +55,26 @@ else
                         </p>
                         <p class="card-text mb-3 text-dark">
                             <i class="bi bi-calendar-event me-2 text-muted"></i>
-                            <strong>تاريخ الإنجاز المتوقع:</strong> <span dir="ltr">@task.ExpectedCompletionDate.ToString("yyyy-MM-dd")</span>
+                            <strong>الموعد المتوقع:</strong> <span dir="ltr">@task.ExpectedCompletionDate.ToString("yyyy-MM-dd")</span>
                         </p>
 
                         <div class="d-flex align-items-center mt-3">
                             @if (task.RemainingDays < 0)
                             {
                                 <span class="badge bg-danger p-2 w-100 fs-6">
-                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                                    متأخرة عن الموعد بـ @Math.Abs(task.RemainingDays) يوم!
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i> متأخرة بـ @Math.Abs(task.RemainingDays) يوم!
                                 </span>
                             }
                             else if (task.RemainingDays <= 2)
                             {
                                 <span class="badge bg-warning text-dark p-2 w-100 fs-6">
-                                    <i class="bi bi-hourglass-split me-1"></i>
-                                    اقترب الموعد (متبقي @task.RemainingDays يوم)
+                                    <i class="bi bi-hourglass-split me-1"></i> اقترب الموعد (@task.RemainingDays يوم)
                                 </span>
                             }
                             else
                             {
                                 <span class="badge bg-success p-2 w-100 fs-6">
-                                    <i class="bi bi-check-circle me-1"></i>
-                                    الوقت متاح (متبقي @task.RemainingDays يوم)
+                                    <i class="bi bi-check-circle me-1"></i> الوقت متاح (@task.RemainingDays يوم)
                                 </span>
                             }
                         </div>
@@ -94,30 +90,29 @@ else
     </div>
 }
 
-@* Modal (نافذة تأكيد الإنجاز) *@
 @if (showCompleteModal && selectedTask != null)
 {
     <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">تأكيد إنجاز المهمة</h5>
+                    <h5 class="modal-title">تأكيد الإنجاز</h5>
                     <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
                 </div>
                 <div class="modal-body bg-light">
-                    <div class="alert alert-info border-info">
+                    <div class="alert alert-info">
                         <strong>المهمة:</strong> @selectedTask.StageName<br />
                         <strong>المركز:</strong> @selectedTask.CenterName
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">ملاحظات الإنجاز (أو أسباب التأخير)</label>
+                        <label class="form-label fw-bold">ملاحظات الإنجاز</label>
                         <textarea class="form-control" rows="3" @bind="taskNotes"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-secondary" @onclick="CloseModal">إلغاء</button>
                     <button type="button" class="btn btn-success px-4 fw-bold" @onclick="ConfirmComplete" disabled="@isSaving">
-                        @(isSaving ? "جاري التحديث..." : "تأكيد وإغلاق المهمة")
+                        @(isSaving ? "جاري الحفظ..." : "تأكيد وإغلاق المهمة")
                     </button>
                 </div>
             </div>
@@ -131,7 +126,6 @@ else
     private PendingTaskDto? selectedTask;
     private string taskNotes = string.Empty;
     private bool isSaving = false;
-
     private string globalMessage = string.Empty;
     private bool isSuccessMessage = true;
 
@@ -144,35 +138,26 @@ else
     {
         try
         {
-            // 1. استخراج الصلاحيات من جلسة Blazor
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var roles = authState.User.Claims
                 .Where(c => c.Type.Contains("role", StringComparison.OrdinalIgnoreCase))
                 .Select(c => c.Value)
                 .ToList();
 
-            // 🚀 2. تشفير الصلاحيات إلى (Base64) لتجاوز مشكلة الحروف العربية (ASCII)
-            var rolesString = string.Join(",", roles);
-            var base64Roles = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(rolesString));
+            if (!roles.Any())
+            {
+                tasks = new List<PendingTaskDto>();
+                return;
+            }
 
-            // 3. إرفاق النص المشفر في الهيدر
-            var request = new HttpRequestMessage(HttpMethod.Get, "api/Tasks/my-pending");
-            request.Headers.Add("X-User-Roles", base64Roles);
+            var rolesParam = Uri.EscapeDataString(string.Join(",", roles));
+            var url = $"api/Tasks/my-pending?roles={rolesParam}";
 
-            var response = await Http.SendAsync(request);
-
+            var response = await Http.GetAsync(url);
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<ResultModel<List<PendingTaskDto>>>();
-                if (result != null && result.Succeeded)
-                {
-                    tasks = result.Data ?? new List<PendingTaskDto>();
-                }
-                else
-                {
-                    ShowMessage(result?.Message ?? "فشل في جلب المهام.", false);
-                    tasks = new List<PendingTaskDto>();
-                }
+                tasks = result?.Data ?? new List<PendingTaskDto>();
             }
             else
             {
@@ -209,38 +194,23 @@ else
         try
         {
             var command = new CompleteTaskCommandDto { TaskId = selectedTask.TaskId, Notes = taskNotes };
-
-            var request = new HttpRequestMessage(HttpMethod.Post, $"api/Tasks/{selectedTask.TaskId}/complete")
-            {
-                Content = System.Net.Http.Json.JsonContent.Create(command)
-            };
-
-            var response = await Http.SendAsync(request);
+            var response = await Http.PostAsJsonAsync($"api/Tasks/{selectedTask.TaskId}/complete", command);
 
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<ResultModel<bool>>();
-                if (result != null && result.Succeeded)
-                {
-                    ShowMessage("تم إنجاز المهمة بنجاح! وانتقل مسار العمل آلياً للجهة التالية.", true);
-                    CloseModal();
-                    await LoadTasks();
-                }
-                else
-                {
-                    ShowMessage(result?.Message ?? "حدث خطأ أثناء الإنهاء.", false);
-                    CloseModal();
-                }
+                ShowMessage("تم إنجاز المهمة بنجاح!", true);
+                CloseModal();
+                await LoadTasks();
             }
             else
             {
-                ShowMessage("فشل في إرسال طلب الإنهاء.", false);
+                ShowMessage("حدث خطأ أثناء الحفظ.", false);
                 CloseModal();
             }
         }
         catch (Exception ex)
         {
-            ShowMessage($"خطأ في الاتصال: {ex.Message}", false);
+            ShowMessage($"خطأ: {ex.Message}", false);
             CloseModal();
         }
         finally
@@ -262,9 +232,6 @@ else
         isSuccessMessage = isSuccess;
     }
 
-    // ==========================================
-    // الكلاسات المستقلة للواجهة (لمنع تداخل المعمارية)
-    // ==========================================
     public class PendingTaskDto
     {
         public int TaskId { get; set; }
@@ -274,7 +241,7 @@ else
         public string StageName { get; set; } = string.Empty;
         public DateTime ExpectedCompletionDate { get; set; }
         public int TrackNumber { get; set; }
-        public int RemainingDays { get; set; }
+        public int RemainingDays => (ExpectedCompletionDate.Date - DateTime.UtcNow.Date).Days;
     }
 
     public class CompleteTaskCommandDto
